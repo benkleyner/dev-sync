@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	ignore "github.com/sabhiram/go-gitignore"
 )
 
 const version = "0.1.0"
@@ -46,14 +49,45 @@ func usage() {
 }
 
 func runScan(root string) error {
+	matcher, err := loadGitignore(root)
+	if err != nil {
+		return err
+	}
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+
 		if d.IsDir() {
+			if rel == ".git" {
+				return filepath.SkipDir
+			}
+			if matcher != nil && matcher.MatchesPath(rel) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if matcher != nil && matcher.MatchesPath(rel) {
 			return nil
 		}
 		fmt.Println(path)
 		return nil
 	})
+}
+
+func loadGitignore(root string) (*ignore.GitIgnore, error) {
+	path := filepath.Join(root, ".gitignore")
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return ignore.CompileIgnoreFile(path)
 }
