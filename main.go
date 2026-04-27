@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"time"
 
+	"github.com/fsnotify/fsnotify"
 	ignore "github.com/sabhiram/go-gitignore"
 )
 
@@ -103,27 +104,48 @@ func loadGitignore(root string) (*ignore.GitIgnore, error) {
 }
 
 func runWatch(root string) error {
-	scanner, err := NewScanner(root)
+	watcher, err := NewWatcher(root)
 	if err != nil {
 		return err
 	}
+	defer watcher.Close()
 
-	fmt.Printf("watching %s (poll every 2s, Ctrl-C to stop)\n", root)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+
+	fmt.Printf("watching %s (Ctrl-C to stop)\n", root)
 
 	for {
-		changes, err := scanner.Scan()
-		if err != nil {
-			return err
+		select {
+		case ev, ok := <-watcher.Events():
+			if !ok {
+				return nil
+			}
+			if watcher.ShouldIgnore(ev.Name) {
+				continue
+			}
+			printEvent(ev)
+		case err, ok := <-watcher.Errors():
+			if !ok {
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "watch error: %v\n", err)
+		case <-sigs:
+			fmt.Println("\nshutting down...")
+			return nil
 		}
-		for _, path := range changes.Added {
-			fmt.Printf(" + %s \n", path)
-		}
-		for _, path := range changes.Modified {
-			fmt.Printf(" ~ %s \n", path)
-		}
-		for _, path := range changes.Removed {
-			fmt.Printf(" - %s \n", path)
-		}
-		time.Sleep(2 * time.Second)
+	}
+}
+
+func printEvent(ev fsnotify.Event) {
+	switch {
+	case ev.Has(fsnotify.Create):
+		fmt.Printf(" + %s\n", ev.Name)
+	case ev.Has(fsnotify.Write):
+		fmt.Printf(" ~ %s\n", ev.Name)
+	case ev.Has(fsnotify.Remove):
+		fmt.Printf(" - %s\n", ev.Name)
+	case ev.Has(fsnotify.Rename):
+		fmt.Printf(" > %s\n", ev.Name)
 	}
 }
