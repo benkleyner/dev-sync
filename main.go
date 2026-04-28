@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"github.com/fsnotify/fsnotify"
 	ignore "github.com/sabhiram/go-gitignore"
@@ -36,11 +37,11 @@ func main() {
 		}
 	case "mirror":
 		if len(os.Args) < 4 {
-			fmt.Fprintln(os.Stderr, "usage dev-sync mirror <src> <dest>")
+			fmt.Fprintln(os.Stderr, "usage dev-sync mirror <src> <user@host:remoteDir>")
 			os.Exit(1)
 		}
-		if err := runMirror(os.Args[2], os.Args[3]); err != nil {
-			fmt.Fprintf(os.Stderr, "mirror failed: %v\n", err)
+		if err := runSFTPMirror(os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintf(os.Stderr, "sftp-mirror failed: %v\n", err)
 			os.Exit(1)
 		}
 	default:
@@ -58,7 +59,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, " version   print the version")
 	fmt.Fprintln(os.Stderr, " scan      list all files under a directory")
 	fmt.Fprintln(os.Stderr, " watch     watch a directory and print changes")
-	fmt.Fprintln(os.Stderr, " mirror    mirror one directory to another")
+	fmt.Fprintln(os.Stderr, " mirror    mirror local directory to remote")
 }
 
 func runScan(root string) error {
@@ -105,43 +106,7 @@ func loadGitignore(root string) (*ignore.GitIgnore, error) {
 	return ignore.CompileIgnoreFile(path)
 }
 
-func runMirror(src, dst string) error {
-	watcher, err := NewWatcher(src)
-	if err != nil {
-		return err
-	}
-	defer watcher.Close()
-
-	syncer := NewLocalSyncer(src, dst)
-
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-
-	fmt.Printf("mirroring %s -> %s (Ctrl-C to stop)\n", src, dst)
-
-	for {
-		select {
-		case ev, ok := <-watcher.Events():
-			if !ok {
-				return nil
-			}
-			if watcher.ShouldIgnore(ev.Name) {
-				continue
-			}
-			handleEvent(ev, src, syncer)
-		case err, ok := <-watcher.Errors():
-			if !ok {
-				return nil
-			}
-			fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
-		case <-sigs:
-			fmt.Println("\nshutting down...")
-			return nil
-		}
-	}
-}
-
-func handleEvent(ev fsnotify.Event, srcRoot string, syncer *LocalSyncer) {
+func handleEvent(ev fsnotify.Event, srcRoot string, syncer Syncer) {
 	rel, err := filepath.Rel(srcRoot, ev.Name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "rel path: %v\n", err)
@@ -170,4 +135,73 @@ func handleEvent(ev fsnotify.Event, srcRoot string, syncer *LocalSyncer) {
 		return
 	}
 	fmt.Printf("  ✓ %s \n", rel)
+}
+
+func runSFTPMirror(src, target string) error {
+	user, host, dstRoot, err := parseSFTPTarget(target)
+	if err != nil {
+		return err
+	}
+	password := os.Getenv("DEV_SYNC_PASSWORD")
+	if password == "" {
+		return fmt.Errorf("set DEV_SYNC_PASSWORD env var")
+	}
+
+	syncer, err := NewSFTPSyncer(src, host, user, password, dstRoot)
+	if err != nil {
+		return err
+	}
+	defer syncer.Close()
+
+	return runSyncLoop(src, syncer, target)
+}
+
+func runSyncLoop(src string, syncer Syncer, label string) error {
+	watcher, err := NewWatcher(src)
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+
+	fmt.Printf("mirroring %s -> %s (Ctrl-C to stop)\n", src, label)
+
+	for {
+		select {
+		case ev, ok := <-watcher.Events():
+			if !ok {
+				return nil
+			}
+			if watcher.ShouldIgnore(ev.Name) {
+				continue
+			}
+			handleEvent(ev, src, syncer)
+		case err, ok := <-watcher.Errors():
+			if !ok {
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
+		case <-sigs:
+			fmt.Println("\nshutting down...")
+			return nil
+		}
+	}
+}
+
+func parseSFTPTarget(target string) (user, hostport, dstRoot string, err error) {
+	at := strings.Index(target, "@")
+	if at < 0 {
+		return "", "", "", fmt.Errorf("expected user@host:path, got %q", target)
+	}
+	user = target[:at]
+	rest := target[at+1:]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		return "", "", "", fmt.Errorf("expected user@host:path, got %q", target)
+	}
+	host := rest[:colon]
+	dstRoot = rest[colon+1:]
+	return user, host + ":22", dstRoot, nil
 }
