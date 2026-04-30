@@ -44,6 +44,16 @@ func main() {
 			fmt.Fprintf(os.Stderr, "sftp-mirror failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "init":
+		if err := runInit(); err != nil {
+			fmt.Fprintf(os.Stderr, "init failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "list":
+		if err := runList(); err != nil {
+			fmt.Fprintf(os.Stderr, "list failed: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
 		usage()
@@ -58,8 +68,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, " hello     print a greeting")
 	fmt.Fprintln(os.Stderr, " version   print the version")
 	fmt.Fprintln(os.Stderr, " scan      list all files under a directory")
-	fmt.Fprintln(os.Stderr, " watch     watch a directory and print changes")
 	fmt.Fprintln(os.Stderr, " mirror    mirror local directory to remote")
+	fmt.Fprintln(os.Stderr, " init      setup mirroring of a local directory to a remote")
+	fmt.Fprintln(os.Stderr, " list      list all currently configured sync pairs")
 }
 
 func runScan(root string) error {
