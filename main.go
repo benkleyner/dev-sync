@@ -34,13 +34,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "scan failed: %v\n", err)
 			os.Exit(1)
 		}
-	case "watch":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "usage: dev-sync watch <directory>")
+	case "mirror":
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "usage dev-sync mirror <src> <dest>")
 			os.Exit(1)
 		}
-		if err := runWatch(os.Args[2]); err != nil {
-			fmt.Fprintf(os.Stderr, "watch failed: %v\n", err)
+		if err := runMirror(os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintf(os.Stderr, "mirror failed: %v\n", err)
+			os.Exit(1)
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
@@ -57,6 +58,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, " version   print the version")
 	fmt.Fprintln(os.Stderr, " scan      list all files under a directory")
 	fmt.Fprintln(os.Stderr, " watch     watch a directory and print changes")
+	fmt.Fprintln(os.Stderr, " mirror    mirror one directory to another")
 }
 
 func runScan(root string) error {
@@ -103,17 +105,19 @@ func loadGitignore(root string) (*ignore.GitIgnore, error) {
 	return ignore.CompileIgnoreFile(path)
 }
 
-func runWatch(root string) error {
-	watcher, err := NewWatcher(root)
+func runMirror(src, dst string) error {
+	watcher, err := NewWatcher(src)
 	if err != nil {
 		return err
 	}
 	defer watcher.Close()
 
+	syncer := NewLocalSyncer(src, dst)
+
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
 
-	fmt.Printf("watching %s (Ctrl-C to stop)\n", root)
+	fmt.Printf("mirroring %s -> %s (Ctrl-C to stop)\n", src, dst)
 
 	for {
 		select {
@@ -124,12 +128,12 @@ func runWatch(root string) error {
 			if watcher.ShouldIgnore(ev.Name) {
 				continue
 			}
-			printEvent(ev)
+			handleEvent(ev, src, syncer)
 		case err, ok := <-watcher.Errors():
 			if !ok {
 				return nil
 			}
-			fmt.Fprintf(os.Stderr, "watch error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
 		case <-sigs:
 			fmt.Println("\nshutting down...")
 			return nil
@@ -137,15 +141,33 @@ func runWatch(root string) error {
 	}
 }
 
-func printEvent(ev fsnotify.Event) {
-	switch {
-	case ev.Has(fsnotify.Create):
-		fmt.Printf(" + %s\n", ev.Name)
-	case ev.Has(fsnotify.Write):
-		fmt.Printf(" ~ %s\n", ev.Name)
-	case ev.Has(fsnotify.Remove):
-		fmt.Printf(" - %s\n", ev.Name)
-	case ev.Has(fsnotify.Rename):
-		fmt.Printf(" > %s\n", ev.Name)
+func handleEvent(ev fsnotify.Event, srcRoot string, syncer *LocalSyncer) {
+	rel, err := filepath.Rel(srcRoot, ev.Name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rel path: %v\n", err)
+		return
 	}
+
+	if ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename) {
+		if err := syncer.Delete(rel); err != nil {
+			fmt.Fprintf(os.Stderr, "delete %s: %v\n", rel, err)
+			return
+		}
+		fmt.Printf(" - %s\n", rel)
+		return
+	}
+
+	info, err := os.Stat(ev.Name)
+	if err != nil {
+		return
+	}
+	if info.IsDir() {
+		return
+	}
+
+	if err := syncer.Upload(rel); err != nil {
+		fmt.Fprintf(os.Stderr, "upload %s: %v\n", rel, err)
+		return
+	}
+	fmt.Printf("  ✓ %s \n", rel)
 }
