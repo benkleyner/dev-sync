@@ -7,6 +7,11 @@ import (
 	"path/filepath"
 )
 
+type Syncer interface {
+	Upload(relPath string) error
+	Delete(relPath string) error
+}
+
 type LocalSyncer struct {
 	srcRoot string
 	dstRoot string
