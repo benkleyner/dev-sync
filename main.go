@@ -54,6 +54,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "list failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "run":
+		if err := runDaemon(); err != nil {
+			fmt.Fprintf(os.Stderr, "run failed: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
 		usage()
@@ -71,6 +76,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, " mirror    mirror local directory to remote")
 	fmt.Fprintln(os.Stderr, " init      setup mirroring of a local directory to a remote")
 	fmt.Fprintln(os.Stderr, " list      list all currently configured sync pairs")
+	fmt.Fprintln(os.Stderr, " run       run all sync pairs")
 }
 
 func runScan(root string) error {
@@ -117,19 +123,19 @@ func loadGitignore(root string) (*ignore.GitIgnore, error) {
 	return ignore.CompileIgnoreFile(path)
 }
 
-func handleEvent(ev fsnotify.Event, srcRoot string, syncer Syncer) {
+func handleEvent(label string, ev fsnotify.Event, srcRoot string, syncer Syncer) {
 	rel, err := filepath.Rel(srcRoot, ev.Name)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rel path: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[%s] rel path: %v\n", label, err)
 		return
 	}
 
 	if ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename) {
 		if err := syncer.Delete(rel); err != nil {
-			fmt.Fprintf(os.Stderr, "delete %s: %v\n", rel, err)
+			fmt.Fprintf(os.Stderr, "[%s] delete %s: %v\n", label, rel, err)
 			return
 		}
-		fmt.Printf(" - %s\n", rel)
+		fmt.Printf("[%s] - %s\n", label, rel)
 		return
 	}
 
@@ -142,10 +148,10 @@ func handleEvent(ev fsnotify.Event, srcRoot string, syncer Syncer) {
 	}
 
 	if err := syncer.Upload(rel); err != nil {
-		fmt.Fprintf(os.Stderr, "upload %s: %v\n", rel, err)
+		fmt.Fprintf(os.Stderr, "[%s] upload %s: %v\n", label, rel, err)
 		return
 	}
-	fmt.Printf("  ✓ %s \n", rel)
+	fmt.Printf("[%s]  ✓ %s \n", label, rel)
 }
 
 func runSFTPMirror(src, target string) error {
@@ -188,7 +194,7 @@ func runSyncLoop(src string, syncer Syncer, label string) error {
 			if watcher.ShouldIgnore(ev.Name) {
 				continue
 			}
-			handleEvent(ev, src, syncer)
+			handleEvent(label, ev, src, syncer)
 		case err, ok := <-watcher.Errors():
 			if !ok {
 				return nil
