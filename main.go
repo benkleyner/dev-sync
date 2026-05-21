@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	ignore "github.com/sabhiram/go-gitignore"
 )
@@ -32,6 +33,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "scan failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "watch":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: dev-sync watch <directory>")
+			os.Exit(1)
+		}
+		if err := runWatch(os.Args[2]); err != nil {
+			fmt.Fprintf(os.Stderr, "watch failed: %v\n", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
 		usage()
@@ -46,6 +55,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, " hello     print a greeting")
 	fmt.Fprintln(os.Stderr, " version   print the version")
 	fmt.Fprintln(os.Stderr, " scan      list all files under a directory")
+	fmt.Fprintln(os.Stderr, " watch     watch a directory and print changes")
 }
 
 func runScan(root string) error {
@@ -90,4 +100,30 @@ func loadGitignore(root string) (*ignore.GitIgnore, error) {
 		return nil, err
 	}
 	return ignore.CompileIgnoreFile(path)
+}
+
+func runWatch(root string) error {
+	scanner, err := NewScanner(root)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("watching %s (poll every 2s, Ctrl-C to stop)\n", root)
+
+	for {
+		changes, err := scanner.Scan()
+		if err != nil {
+			return err
+		}
+		for _, path := range changes.Added {
+			fmt.Printf(" + %s \n", path)
+		}
+		for _, path := range changes.Modified {
+			fmt.Printf(" ~ %s \n", path)
+		}
+		for _, path := range changes.Removed {
+			fmt.Printf(" - %s \n", path)
+		}
+		time.Sleep(2 * time.Second)
+	}
 }
