@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
 	"sync"
+	"time"
 )
 
 func runDaemon() error {
@@ -25,7 +27,7 @@ func runDaemon() error {
 	for _, pair := range cfg.Pairs {
 		wg.Go(func() {
 			if err := runPair(ctx, pair); err != nil && ctx.Err() == nil {
-				fmt.Fprintf(os.Stderr, "[%s] stopped: %v\n", pair.Name, err)
+				slog.Error("pair stopped", "pair", pair.Name, "err", err)
 			}
 		})
 	}
@@ -49,11 +51,11 @@ func runPair(ctx context.Context, p SyncPair) error {
 	}
 	defer syncer.Close()
 
-	fmt.Printf("[%s] connected; initial sync...\n", p.Name)
+	slog.Info("connected", "pair", p.Name)
 	if err := initialSync(ctx, p, syncer); err != nil {
 		return fmt.Errorf("initial sync: %w", err)
 	}
-	fmt.Printf("[%s] watching %s\n", p.Name, p.LocalDir)
+	slog.Info("watching", "pair", p.Name, "dir", p.LocalDir)
 
 	return watchLoop(ctx, p, syncer)
 }
@@ -72,10 +74,10 @@ func initialSync(ctx context.Context, p SyncPair, syncer Syncer) error {
 			return err
 		}
 		if err := syncer.Upload(rel); err != nil {
-			fmt.Fprintf(os.Stderr, "[%s] upload %s: %v\n", p.Name, rel, err)
+			slog.Error("initial upload failed", "pair", p.Name, "path", rel, "err", err)
 			continue
 		}
-		fmt.Printf("[%s] ✓ %s\n", p.Name, rel)
+		slog.Info("synced", "pair", p.Name, "path", rel)
 	}
 	return nil
 }
@@ -87,23 +89,73 @@ func watchLoop(ctx context.Context, p SyncPair, syncer Syncer) error {
 	}
 	defer watcher.Close()
 
+	scanner, err := NewScanner(p.LocalDir)
+	if err != nil {
+		return err
+	}
+	if _, err := scanner.Scan(); err != nil {
+		return err
+	}
+
+	const debounceWindow = 300 * time.Millisecond
+	var debounce <-chan time.Time
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case ev, ok := <-watcher.Events():
+		case _, ok := <-watcher.Events():
 			if !ok {
 				return nil
 			}
-			if watcher.ShouldIgnore(ev.Name) {
-				continue
-			}
-			handleEvent(p.Name, ev, p.LocalDir, syncer)
+			debounce = time.After(debounceWindow)
 		case err, ok := <-watcher.Errors():
 			if !ok {
 				return nil
 			}
-			fmt.Fprintf(os.Stderr, "[%s] watcher error: %v\n", p.Name, err)
+			slog.Error("watcher error", "pair", p.Name, "err", err)
+		case <-debounce:
+			debounce = nil
+			reconcile(ctx, p, scanner, syncer)
 		}
+	}
+}
+
+func reconcile(ctx context.Context, p SyncPair, scanner *Scanner, syncer Syncer) {
+	changes, err := scanner.Scan()
+	if err != nil {
+		slog.Error("scan failed", "pair", p.Name, "err", err)
+		return
+	}
+
+	for _, rel := range changes.Added {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := syncer.Upload(rel); err != nil {
+			slog.Error("upload failed", "pair", p.Name, "path", rel, "err", err)
+			continue
+		}
+		slog.Info("created", "pair", p.Name, "path", rel)
+	}
+	for _, rel := range changes.Modified {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := syncer.Upload(rel); err != nil {
+			slog.Error("upload failed", "pair", p.Name, "path", rel, "err", err)
+			continue
+		}
+		slog.Info("modified", "pair", p.Name, "path", rel)
+	}
+	for _, rel := range changes.Removed {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := syncer.Delete(rel); err != nil {
+			slog.Error("delete failed", "pair", p.Name, "path", rel, "err", err)
+			continue
+		}
+		slog.Info("deleted", "pair", p.Name, "path", rel)
 	}
 }

@@ -129,7 +129,7 @@ func runInit() error {
 	}
 
 	cfgPath, _ := configPath()
-	fmt.Printf("saved pair %q to %s\n", name, cfgPath)
+	fmt.Printf("%s saved pair %q to %s\n", styleOK.Render("✓"), name, cfgPath)
 	return nil
 }
 
@@ -143,7 +143,9 @@ func runList() error {
 		return nil
 	}
 	for _, p := range cfg.Pairs {
-		fmt.Printf("%s\n %s -> %s@%s:%s\n", p.Name, p.LocalDir, p.User, p.Host, p.RemoteDir)
+		fmt.Println(stylePair.Render(p.Name))
+		target := fmt.Sprintf("%s@%s:%s", p.User, p.Host, p.RemoteDir)
+		fmt.Printf(" %s %s %s\n", stylePath.Render(p.LocalDir), styleKey.Render("->"), stylePath.Render(target))
 	}
 	return nil
 }

@@ -31,6 +31,22 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "dev-sync", "config.json"), nil
 }
 
+func pidFilePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "dev-sync", "daemon.pid"), nil
+}
+
+func logFilePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "dev-sync", "daemon.log"), nil
+}
+
 func LoadConfig() (*Config, error) {
 	path, err := configPath()
 	if err != nil {
