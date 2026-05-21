@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,6 +17,9 @@ import (
 const version = "0.1.0"
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
@@ -59,6 +63,36 @@ func main() {
 			fmt.Fprintf(os.Stderr, "run failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "start":
+		if err := runStart(); err != nil {
+			fmt.Fprintf(os.Stderr, "start failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "stop":
+		if err := runStop(); err != nil {
+			fmt.Fprintf(os.Stderr, "stop failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "status":
+		if err := runStatus(); err != nil {
+			fmt.Fprintf(os.Stderr, "status failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "logs":
+		if err := runLogs(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "logs failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "_daemon":
+		if err := setupDaemonLogger(); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon logger: %v\n", err)
+			os.Exit(1)
+		}
+		if err := runDaemon(); err != nil {
+			slog.Error("daemon exited", "err", err)
+			os.Exit(1)
+		}
+		removePidfile()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
 		usage()
@@ -67,16 +101,31 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dev-sync <command>")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "commands:")
-	fmt.Fprintln(os.Stderr, " hello     print a greeting")
-	fmt.Fprintln(os.Stderr, " version   print the version")
-	fmt.Fprintln(os.Stderr, " scan      list all files under a directory")
-	fmt.Fprintln(os.Stderr, " mirror    mirror local directory to remote")
-	fmt.Fprintln(os.Stderr, " init      setup mirroring of a local directory to a remote")
-	fmt.Fprintln(os.Stderr, " list      list all currently configured sync pairs")
-	fmt.Fprintln(os.Stderr, " run       run all sync pairs")
+	fmt.Fprint(os.Stderr, `usage: dev-sync <command> [args...]
+
+dev-sync watches local directories and syncs changes to remote SFTP destinations.
+
+configuration:
+  init                              interactively configure a new local→remote sync pair
+                                    (prompts for SFTP details, verifies the remote dir exists)
+  list                              show configured sync pairs
+
+running:
+  run                               run all configured pairs in the foreground (Ctrl-C to stop)
+  start                             launch the sync daemon in the background
+  stop                              stop the running background daemon
+  status                            show whether the daemon is running, and its pid
+  logs [n]                          print the last n log entries (default 50)
+
+ad-hoc / debug:
+  scan <directory>                  list every file under <directory>, respecting .gitignore
+  mirror <src> <user@host:dir>      one-off SFTP mirror without touching the config
+                                    (requires DEV_SYNC_PASSWORD env var)
+
+misc:
+  version                           print the version
+  hello                             print a greeting
+`)
 }
 
 func runScan(root string) error {
