@@ -78,15 +78,16 @@ Config, pidfile, and log file live under your platform's user config directory:
 
 Contents:
 
-- `config.json` — sync pairs (created by `init`)
+- `config.json` — sync pairs and keychain password references (created by `init`)
 - `daemon.pid` — written on `start`, removed on `stop`
 - `daemon.log` — JSON-lines log written by the background daemon
 
 The config file is created with `0600` permissions; the directory with `0700`.
 
+SFTP passwords are stored in the OS keychain via `go-keyring`, and legacy plaintext passwords are migrated the next time `init`, `list`, `run`, or `start` loads the config.
+
 ## Known limitations
 
-- **Passwords are stored in plaintext** in `config.json`. The file is `0600` but on-disk plaintext is not a real security boundary. Migration to the OS keychain (`go-keyring`) is planned.
 - **No retry on transient SFTP failures.** A network blip currently stops that pair until the daemon is restarted. Auto-reconnect with exponential backoff is planned.
 - **One-way sync only.** Remote-side changes are not detected and may be overwritten on the next local change.
 - **No nested `.gitignore` support.** Only the root `.gitignore` is consulted.

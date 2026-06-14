@@ -16,7 +16,7 @@ import (
 )
 
 func runStart() error {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfigWithMigratedSecrets()
 	if err != nil {
 		return err
 	}

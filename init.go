@@ -7,10 +7,11 @@ import (
 	"strconv"
 
 	"github.com/charmbracelet/huh"
+	"github.com/zalando/go-keyring"
 )
 
 func runInit() error {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfigWithMigratedSecrets()
 	if err != nil {
 		return err
 	}
@@ -114,17 +115,23 @@ func runInit() error {
 	}
 	syncer.Close()
 
+	passwordRef, err := storePairPassword(name, password)
+	if err != nil {
+		return err
+	}
+
 	cfg.Pairs = append(cfg.Pairs, SyncPair{
-		Name:      name,
-		LocalDir:  localAbs,
-		Host:      host,
-		Port:      port,
-		User:      user,
-		RemoteDir: remoteDir,
-		Password:  password,
+		Name:        name,
+		LocalDir:    localAbs,
+		Host:        host,
+		Port:        port,
+		User:        user,
+		RemoteDir:   remoteDir,
+		PasswordRef: passwordRef,
 	})
 
 	if err := SaveConfig(cfg); err != nil {
+		_ = keyring.Delete(keyringService, passwordRef)
 		return err
 	}
 
@@ -134,7 +141,7 @@ func runInit() error {
 }
 
 func runList() error {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfigWithMigratedSecrets()
 	if err != nil {
 		return err
 	}
