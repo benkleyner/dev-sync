@@ -108,9 +108,9 @@ func runInit() error {
 	localAbs, _ := filepath.Abs(localDir)
 
 	fmt.Println("Verifying SFTP connection...")
-	syncer, err := NewSFTPSyncer(localAbs, host+":"+portStr, user, password, remoteDir)
+	syncer, err := NewPromptingSFTPSyncer(localAbs, host+":"+portStr, user, password, remoteDir)
 	if err != nil {
-		return fmt.Errorf("verication failed: %w", err)
+		return fmt.Errorf("verification failed: %w", err)
 	}
 	syncer.Close()
 

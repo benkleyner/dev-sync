@@ -7,6 +7,7 @@ One-way only (local → remote). Multiple sync pairs run concurrently in a singl
 ## Features
 
 - Interactive onboarding (`dev-sync init`) — prompts for connection details and verifies the remote directory exists before saving
+- Verifies SFTP host keys using `~/.ssh/known_hosts`; `init` can prompt to trust an unknown host
 - Multiple sync pairs run concurrently from one daemon
 - Initial sync on startup, then real-time updates via filesystem events
 - Debounced reconciliation — editor save-storms collapse into one accurate log line per change
@@ -64,6 +65,10 @@ dev-sync stop
 
 `run` and `start` execute the same syncing logic. `run` is for interactive development (logs in your terminal); `start` is for set-and-forget background operation.
 
+## Host key verification
+
+`dev-sync` uses the standard OpenSSH `~/.ssh/known_hosts` file. During `dev-sync init`, an unknown SFTP host key is shown with its key type and SHA256 fingerprint, and you can choose whether to add it to `known_hosts`. Runtime commands (`run`, `start`, and `mirror`) do not prompt; unknown, changed, or revoked host keys fail closed.
+
 ## Configuration
 
 Config, pidfile, and log file live under your platform's user config directory:
@@ -82,7 +87,6 @@ The config file is created with `0600` permissions; the directory with `0700`.
 ## Known limitations
 
 - **Passwords are stored in plaintext** in `config.json`. The file is `0600` but on-disk plaintext is not a real security boundary. Migration to the OS keychain (`go-keyring`) is planned.
-- **Host keys are not verified.** SSH currently uses `InsecureIgnoreHostKey`. Real `~/.ssh/known_hosts` verification is planned.
 - **No retry on transient SFTP failures.** A network blip currently stops that pair until the daemon is restarted. Auto-reconnect with exponential backoff is planned.
 - **One-way sync only.** Remote-side changes are not detected and may be overwritten on the next local change.
 - **No nested `.gitignore` support.** Only the root `.gitignore` is consulted.
