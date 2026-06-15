@@ -18,7 +18,7 @@ One-way only (local → remote). Multiple sync pairs run concurrently in a singl
 ## Install
 
 ```sh
-brew install --cask bkleyner/tap/dev-sync
+brew install --cask benkleyner/tap/dev-sync
 ```
 
 Release tags publish darwin/linux binaries and update the Homebrew tap via GoReleaser.

@@ -41,12 +41,12 @@ homebrew_casks:
     ids:
       - dev-sync
     repository:
-      owner: bkleyner
+      owner: benkleyner
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
-    homepage: https://github.com/bkleyner/dev-sync
+    homepage: https://github.com/benkleyner/dev-sync
     description: Watch local directories and sync changes to SFTP destinations
     license: MIT
     binaries:
