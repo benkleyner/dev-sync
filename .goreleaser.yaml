@@ -51,6 +51,12 @@ homebrew_casks:
     license: MIT
     binaries:
       - dev-sync
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/dev-sync"]
+          end
     caveats: |
       Configure a sync pair with `dev-sync init`, then run `dev-sync start`.
       Runtime state is stored under your user config directory.
