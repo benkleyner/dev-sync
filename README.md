@@ -15,6 +15,14 @@ One-way only (local → remote). Multiple sync pairs run concurrently in a singl
 - Structured JSON logging to a file; `dev-sync logs` for a pretty, recent view
 - Background daemon with proper start/stop/status lifecycle
 
+## Install
+
+```sh
+brew install --cask bkleyner/tap/dev-sync
+```
+
+Release tags publish darwin/linux binaries and update the Homebrew tap via GoReleaser.
+
 ## Build
 
 Requires Go 1.25 or newer.
@@ -91,5 +99,4 @@ SFTP passwords are stored in the OS keychain via `go-keyring`, and legacy plaint
 - **No retry on transient SFTP failures.** A network blip currently stops that pair until the daemon is restarted. Auto-reconnect with exponential backoff is planned.
 - **One-way sync only.** Remote-side changes are not detected and may be overwritten on the next local change.
 - **No nested `.gitignore` support.** Only the root `.gitignore` is consulted.
-- **New subdirectories created mid-run are not watched.** Files inside them are picked up on the next daemon restart.
-- **`Setsid`-based daemonization is Unix-only** — `start`/`stop`/`status` will not work on Windows as written.
+- **Background daemon control is Unix-only.** `start`/`stop`/`status` are disabled on Windows.

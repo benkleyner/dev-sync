@@ -1,0 +1,56 @@
+version: 2
+
+project_name: dev-sync
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: dev-sync
+    main: .
+    binary: dev-sync
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: dev-sync
+    ids:
+      - dev-sync
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+homebrew_casks:
+  - name: dev-sync
+    ids:
+      - dev-sync
+    repository:
+      owner: bkleyner
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/bkleyner/dev-sync
+    description: Watch local directories and sync changes to SFTP destinations
+    license: MIT
+    binaries:
+      - dev-sync
+    caveats: |
+      Configure a sync pair with `dev-sync init`, then run `dev-sync start`.
+      Runtime state is stored under your user config directory.

@@ -14,7 +14,7 @@ import (
 	ignore "github.com/sabhiram/go-gitignore"
 )
 
-const version = "0.1.0"
+var version = "0.1.0"
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -26,8 +26,6 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "hello":
-		fmt.Println("hello from dev-sync")
 	case "version":
 		fmt.Println(version)
 	case "scan":
@@ -84,15 +82,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "_daemon":
-		if err := setupDaemonLogger(); err != nil {
-			fmt.Fprintf(os.Stderr, "daemon logger: %v\n", err)
-			os.Exit(1)
-		}
-		if err := runDaemon(); err != nil {
-			slog.Error("daemon exited", "err", err)
-			os.Exit(1)
-		}
-		removePidfile()
+		os.Exit(runDaemonSubcommand())
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
 		usage()
@@ -124,7 +114,6 @@ ad-hoc / debug:
 
 misc:
   version                           print the version
-  hello                             print a greeting
 `)
 }
 
