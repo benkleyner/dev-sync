@@ -240,6 +240,9 @@ func runSyncLoop(src string, syncer Syncer, label string) error {
 			if !ok {
 				return nil
 			}
+			if err := watcher.WatchCreatedDir(ev.Name); err != nil {
+				fmt.Fprintf(os.Stderr, "watch new directory: %v\n", err)
+			}
 			if watcher.ShouldIgnore(ev.Name) {
 				continue
 			}

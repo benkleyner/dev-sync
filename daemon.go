@@ -104,9 +104,12 @@ func watchLoop(ctx context.Context, p SyncPair, syncer Syncer) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case _, ok := <-watcher.Events():
+		case ev, ok := <-watcher.Events():
 			if !ok {
 				return nil
+			}
+			if err := watcher.WatchCreatedDir(ev.Name); err != nil {
+				slog.Error("watch new directory failed", "pair", p.Name, "path", ev.Name, "err", err)
 			}
 			debounce = time.After(debounceWindow)
 		case err, ok := <-watcher.Errors():

@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
@@ -56,6 +57,20 @@ func (w *Watcher) addTree(root string) error {
 func (w *Watcher) Events() <-chan fsnotify.Event { return w.fsw.Events }
 func (w *Watcher) Errors() <-chan error          { return w.fsw.Errors }
 func (w *Watcher) Close() error                  { return w.fsw.Close() }
+
+func (w *Watcher) WatchCreatedDir(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	return w.addTree(path)
+}
 
 func (w *Watcher) ShouldIgnore(path string) bool {
 	rel, err := filepath.Rel(w.root, path)
