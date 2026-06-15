@@ -7,10 +7,11 @@ import (
 	"strconv"
 
 	"github.com/charmbracelet/huh"
+	"github.com/zalando/go-keyring"
 )
 
 func runInit() error {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfigWithMigratedSecrets()
 	if err != nil {
 		return err
 	}
@@ -108,23 +109,29 @@ func runInit() error {
 	localAbs, _ := filepath.Abs(localDir)
 
 	fmt.Println("Verifying SFTP connection...")
-	syncer, err := NewSFTPSyncer(localAbs, host+":"+portStr, user, password, remoteDir)
+	syncer, err := NewPromptingSFTPSyncer(localAbs, host+":"+portStr, user, password, remoteDir)
 	if err != nil {
-		return fmt.Errorf("verication failed: %w", err)
+		return fmt.Errorf("verification failed: %w", err)
 	}
 	syncer.Close()
 
+	passwordRef, err := storePairPassword(name, password)
+	if err != nil {
+		return err
+	}
+
 	cfg.Pairs = append(cfg.Pairs, SyncPair{
-		Name:      name,
-		LocalDir:  localAbs,
-		Host:      host,
-		Port:      port,
-		User:      user,
-		RemoteDir: remoteDir,
-		Password:  password,
+		Name:        name,
+		LocalDir:    localAbs,
+		Host:        host,
+		Port:        port,
+		User:        user,
+		RemoteDir:   remoteDir,
+		PasswordRef: passwordRef,
 	})
 
 	if err := SaveConfig(cfg); err != nil {
+		_ = keyring.Delete(keyringService, passwordRef)
 		return err
 	}
 
@@ -134,7 +141,7 @@ func runInit() error {
 }
 
 func runList() error {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfigWithMigratedSecrets()
 	if err != nil {
 		return err
 	}

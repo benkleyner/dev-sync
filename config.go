@@ -14,13 +14,14 @@ type Config struct {
 }
 
 type SyncPair struct {
-	Name      string `json:"name"`
-	LocalDir  string `json:"local_dir"`
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	User      string `json:"user"`
-	RemoteDir string `json:"remote_dir"`
-	Password  string `json:"password"`
+	Name        string `json:"name"`
+	LocalDir    string `json:"local_dir"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	User        string `json:"user"`
+	RemoteDir   string `json:"remote_dir"`
+	PasswordRef string `json:"password_ref,omitempty"`
+	Password    string `json:"password,omitempty"` // legacy plaintext; migrate then clear
 }
 
 func configPath() (string, error) {

@@ -23,10 +23,26 @@ type SFTPSyncer struct {
 }
 
 func NewSFTPSyncer(srcRoot, host, user, password, dstRoot string) (*SFTPSyncer, error) {
+	callback, err := strictKnownHostsCallback()
+	if err != nil {
+		return nil, fmt.Errorf("known_hosts: %w", err)
+	}
+	return newSFTPSyncer(srcRoot, host, user, password, dstRoot, callback)
+}
+
+func NewPromptingSFTPSyncer(srcRoot, host, user, password, dstRoot string) (*SFTPSyncer, error) {
+	callback, err := promptingKnownHostsCallback()
+	if err != nil {
+		return nil, fmt.Errorf("known_hosts: %w", err)
+	}
+	return newSFTPSyncer(srcRoot, host, user, password, dstRoot, callback)
+}
+
+func newSFTPSyncer(srcRoot, host, user, password, dstRoot string, hostKeyCallback ssh.HostKeyCallback) (*SFTPSyncer, error) {
 	config := &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         10 * time.Second,
 	}
 

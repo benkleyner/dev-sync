@@ -12,7 +12,7 @@ import (
 )
 
 func runDaemon() error {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfigWithMigratedSecrets()
 	if err != nil {
 		return err
 	}
@@ -39,11 +39,16 @@ func runDaemon() error {
 }
 
 func runPair(ctx context.Context, p SyncPair) error {
+	password, err := passwordForPair(p)
+	if err != nil {
+		return err
+	}
+
 	syncer, err := NewSFTPSyncer(
 		p.LocalDir,
 		p.Host+":"+strconv.Itoa(p.Port),
 		p.User,
-		p.Password,
+		password,
 		p.RemoteDir,
 	)
 	if err != nil {
